@@ -1,5 +1,8 @@
 import * as eventsRepository from '../repositories/eventsRepository.mjs';
 import * as registrationsRepository from '../repositories/registrationsRepository.mjs';
+import { env } from '../config/env.mjs';
+import * as cache from '../utils/cache.mjs';
+import { keys } from './eventsService.mjs';
 
 // Service = the numbers for the Stats page: how full is each event?
 
@@ -11,21 +14,23 @@ function statusOf(event, registered, now) {
   return 'open';
 }
 
-export async function getStats() {
-  const events = await eventsRepository.findAll();
-  const now = new Date();
+export function getStats() {
+  return cache.remember(keys.stats, env.cacheTtlSeconds, async () => {
+    const events = await eventsRepository.findAll();
+    const now = new Date();
 
-  // Promise.all: count the registrations of all events at the same time, not one by one.
-  // We only ask "how many?" (count), instead of loading every registration like the old code.
-  return Promise.all(events.map(async (event) => {
-    const registered = await registrationsRepository.countByEvent(event.id);
-    return {
-      id: event.id,
-      title: event.title,
-      registered,
-      capacity: event.capacity,
-      occupancy: `${Math.round((registered / event.capacity) * 100)}%`,
-      status: statusOf(event, registered, now)
-    };
-  }));
+    // Promise.all: count the registrations of all events at the same time, not one by one.
+    // We only ask "how many?" (count), instead of loading every registration like the old code.
+    return Promise.all(events.map(async (event) => {
+      const registered = await registrationsRepository.countByEvent(event.id);
+      return {
+        id: event.id,
+        title: event.title,
+        registered,
+        capacity: event.capacity,
+        occupancy: `${Math.round((registered / event.capacity) * 100)}%`,
+        status: statusOf(event, registered, now)
+      };
+    }));
+  });
 }

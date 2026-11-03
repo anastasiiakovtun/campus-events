@@ -1,16 +1,20 @@
 import * as registrationsRepository from '../repositories/registrationsRepository.mjs';
+import { env } from '../config/env.mjs';
 import { conflict } from '../utils/AppError.mjs';
+import * as cache from '../utils/cache.mjs';
 import { logger } from '../utils/logger.mjs';
 import { sendRegistrationConfirmation } from '../utils/mailer.mjs';
-import { findEventOrFail } from './eventsService.mjs';
+import { findEventOrFail, keys } from './eventsService.mjs';
 
 // Service = the rules for registrations.
 
 // Everyone registered for one event, in the order they signed up.
 // First check that the event exists, otherwise 404.
-export async function listRegistrations(eventId) {
-  await findEventOrFail(eventId);
-  return registrationsRepository.findByEvent(eventId);
+export function listRegistrations(eventId) {
+  return cache.remember(keys.registrations(eventId), env.cacheTtlSeconds, async () => {
+    await findEventOrFail(eventId);
+    return registrationsRepository.findByEvent(eventId);
+  });
 }
 
 // Register someone for an event.
@@ -28,6 +32,8 @@ export async function register(eventId, { name, email }) {
   if (registered >= event.capacity) throw conflict('Event is full');
 
   const registration = await registrationsRepository.create({ eventId, name, email });
+  // Seats left, the list of people and the stats are now out of date.
+  cache.del(keys.event(eventId), keys.registrations(eventId), keys.stats);
   // Only ids in the log, no name or email: personal data doesn't belong in logs (privacy).
   logger.info('new registration', { eventId, registrationId: registration.id });
 

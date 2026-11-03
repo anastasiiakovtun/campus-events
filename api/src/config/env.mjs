@@ -14,6 +14,7 @@ export const env = {
   dbStorage: process.env.DB_STORAGE || './data/events.sqlite',
   // Mail server address, e.g. smtps://user:password@smtp.example.com. Empty = don't really send.
   smtpUrl: process.env.SMTP_URL || '',
-  mailFrom: process.env.MAIL_FROM || 'Campus Events <no-reply@campus-events.test>'
+  mailFrom: process.env.MAIL_FROM || 'Campus Events <no-reply@campus-events.test>',
+  // How long (in seconds) a GET answer stays in the cache.
+  cacheTtlSeconds: Number(process.env.CACHE_TTL_SECONDS) || 60
 };
-
