@@ -1,6 +1,7 @@
 import * as registrationsRepository from '../repositories/registrationsRepository.mjs';
 import { conflict } from '../utils/AppError.mjs';
 import { logger } from '../utils/logger.mjs';
+import { sendRegistrationConfirmation } from '../utils/mailer.mjs';
 import { findEventOrFail } from './eventsService.mjs';
 
 // Service = the rules for registrations.
@@ -29,5 +30,13 @@ export async function register(eventId, { name, email }) {
   const registration = await registrationsRepository.create({ eventId, name, email });
   // Only ids in the log, no name or email: personal data doesn't belong in logs (privacy).
   logger.info('new registration', { eventId, registrationId: registration.id });
+
+  // Send the mail in the background: no "await", so the user gets the answer right away.
+  // The registration is already saved. If the mail server is slow, broken or offline,
+  // we only log the error: the registration stays correct.
+  sendRegistrationConfirmation(registration, event).catch((err) => {
+    logger.error('confirmation mail failed', { registrationId: registration.id, error: err.message });
+  });
+
   return registration;
 }
