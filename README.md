@@ -54,58 +54,38 @@ so the browser only talks to one address and you don't need CORS.
 
 ### api/
 
-The API is split into layers:
+## Assignment: what I changed
 
-```
-routes/              URL + validation → controller        (no business logic)
-controllers/         HTTP in/out, picks the status code    (thin)
-services/            business rules, throws AppErrors      (no Express, no SQL)
-repositories/        data access via Sequelize             (no rules)
-models/              tables, connection, demo data
-middleware/           validation, error handling, logging
-config/              the only place that reads process.env
-utils/                logger, AppError, cache and mailer
-api/src/server.mjs   starts the app (and adds demo data to an empty database)
-api/src/seed.mjs     npm run seed: reset the database
-```
+**Live API:** https://campus-events-1-g4or.onrender.com/api (try `/api/events`, `/api/stats`, `/api/health`)
 
-The integration tests in `api/tests/integration` only talk HTTP. They pass without changing the teacher's tests.
+1. **Clean up and split logic.** `api/src/app.mjs` was split into layers:
+   routes → controllers → services → repositories → models, plus `middleware/` (validation, error handling,
+   request logging), `config/env.mjs` (the only file that reads `process.env`) and `utils/` (logger, AppError, cache, mailer).
+   The teacher's integration tests pass without changes. Also fixed a bug: a full event still accepted one more person
+   (`count > capacity` → `>=`), with a new test in `tests/integration/capacity.test.mjs`.
+2. **Confirmation mail.** After a registration is saved, the mail is sent in the background (no `await`) with `.catch()`.
+   The user gets the answer right away, and if the mail server is slow or offline, the registration is still stored.
+   Tested in `tests/integration/mail.test.mjs` with an offline mail server.
+3. **Caching for GET endpoints.** Cache-aside with a TTL (`utils/cache.mjs`). Every change (create, update, delete,
+   register) deletes the cache keys that are now wrong. Tested in `tests/integration/cache.test.mjs`.
+4. **Online.** Deployed on Render (auto-deploys on every push to `main`).
 
-### Additional features
+### Stack Overflow links I used
 
-- **Capacity fix:** full events no longer accept another registration (`count >= capacity`).
-  Covered by `api/tests/integration/capacity.test.mjs`.
-- **Confirmation mail:** after a registration is saved, the confirmation mail is sent in the background without
-  blocking the response. Mail failures are caught and logged, so an unavailable mail server does not lose the
-  registration. Covered by `api/tests/integration/mail.test.mjs`.
-- **GET caching:** `api/src/utils/cache.mjs` provides an in-memory cache-aside implementation with a configurable
-  TTL (`CACHE_TTL_SECONDS`, default 60 seconds). Create, update, delete and registration operations invalidate the
-  cache keys that they make stale. Covered by `api/tests/integration/cache.test.mjs`.
-
-### Live API
-
-The deployed API is available at:
-
-**https://campus-events-1-g4or.onrender.com/api**
-
-Useful endpoints:
-
-- `/api/events`
-- `/api/stats`
-- `/api/health`
-
-The Render deployment auto-deploys on every push to `main`.
-
-### References
-
-These Stack Overflow discussions informed the implementation:
-
-- [Building enterprise app with Node/Express](https://stackoverflow.com/questions/41875617/building-enterprise-app-with-node-express) —
-  informed the separation between controllers, services and the data layer.
-- [Downside of calling an async function without await](https://stackoverflow.com/questions/49657914/down-side-on-calling-async-function-without-await) —
-  informed the background mail call and explicit `.catch()` error handling.
-- [Redis cache vs using memory directly](https://stackoverflow.com/questions/19477821/redis-cache-vs-using-memory-directly) —
-  informed the choice of an in-memory TTL cache for this single API instance.
+- https://stackoverflow.com/questions/41875617/building-enterprise-app-with-node-express
+  **Why:** In the old `app.mjs` everything was in one file, some things were mixed up and it was really hard to read.
+  The person in this question had the same problem: the controller did everything (request, validation and business rules).
+  They wanted separate layers: controller for the web part, service for the business rules, and a data layer for the database.
+  I used this idea to split my project into routes, controllers, services and repositories.
+- https://stackoverflow.com/questions/49657914/down-side-on-calling-async-function-without-await
+  **Why:** The person wants to call an async function without waiting for it to finish, like my confirmation mail:
+  the user should get the answer right away. The answer warns that you still have to handle the errors, otherwise Node.js
+  can crash. That's why I call `sendRegistrationConfirmation()` without `await`, but with `.catch()`, so if the mail server
+  is offline, the error is only logged and the registration stays saved.
+- https://stackoverflow.com/questions/19477821/redis-cache-vs-using-memory-directly
+  **Why:** The person asks why to use Redis if you can store the cache in a normal object in memory. The answer explains
+  that memory is faster, but Redis is needed when the app runs on several servers that share the same cache.
+  We have only one copy of the API, so I used an in-memory cache with a TTL.
 
 | Method | URL | |
 |---|---|---|
