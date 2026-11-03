@@ -1,0 +1,10 @@
+import { createLogger, format, transports } from 'winston';
+import { env } from '../config/env.mjs';
+
+// One logger for the whole API. Silent during tests so the test output stays clean.
+export const logger = createLogger({
+  level: env.logLevel,
+  silent: env.nodeEnv === 'test',
+  format: format.combine(format.timestamp(), format.json()),
+  transports: [new transports.Console()]
+});
