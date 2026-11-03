@@ -7,9 +7,8 @@ A small but complete web app: students browse campus events and register for the
 - **api/** : REST API: Node.js, Express 5, Sequelize + SQLite, Zod
 - **web/** : frontend: Vue 3, Vue Router, Vite
 
-It works out of the box, and it has tests. It is also the kind of code you will meet in your first job:
-the whole API is one long file. Your job is to **clean it up, ship it to production, fix it and add the hard
-parts**
+It works out of the box, and it has tests. The API has been cleaned up, deployed to production, fixed and extended
+with confirmation mail and caching.
 
 ## Quick start
 
@@ -55,27 +54,58 @@ so the browser only talks to one address and you don't need CORS.
 
 ### api/
 
-**Today** the whole API lives in one file:
+The API is split into layers:
 
 ```
-api/src/app.mjs      settings, database + models, validation, routes, business rules, error handling
+routes/              URL + validation → controller        (no business logic)
+controllers/         HTTP in/out, picks the status code    (thin)
+services/            business rules, throws AppErrors      (no Express, no SQL)
+repositories/        data access via Sequelize             (no rules)
+models/              tables, connection, demo data
+middleware/           validation, error handling, logging
+config/              the only place that reads process.env
+utils/                logger, AppError, cache and mailer
 api/src/server.mjs   starts the app (and adds demo data to an empty database)
 api/src/seed.mjs     npm run seed: reset the database
 ```
 
-Prefered:
+The integration tests in `api/tests/integration` only talk HTTP. They pass without changing the teacher's tests.
 
-```
-routes/        URL + validation → controller        (no logic)
-controllers/   HTTP in/out, picks the status code    (thin)
-services/      business rules, throws AppErrors      (no Express, no SQL)
-repositories/  data access via Sequelize             (no rules)
-models/ db/    tables, connection, demo data
-config/        the only place that reads process.env
-```
+### Additional features
 
-The integration tests in `api/tests/integration` only talk HTTP. They pass before your refactoring,
-and they must still pass after it, without changing them.
+- **Capacity fix:** full events no longer accept another registration (`count >= capacity`).
+  Covered by `api/tests/integration/capacity.test.mjs`.
+- **Confirmation mail:** after a registration is saved, the confirmation mail is sent in the background without
+  blocking the response. Mail failures are caught and logged, so an unavailable mail server does not lose the
+  registration. Covered by `api/tests/integration/mail.test.mjs`.
+- **GET caching:** `api/src/utils/cache.mjs` provides an in-memory cache-aside implementation with a configurable
+  TTL (`CACHE_TTL_SECONDS`, default 60 seconds). Create, update, delete and registration operations invalidate the
+  cache keys that they make stale. Covered by `api/tests/integration/cache.test.mjs`.
+
+### Live API
+
+The deployed API is available at:
+
+**https://campus-events-1-g4or.onrender.com/api**
+
+Useful endpoints:
+
+- `/api/events`
+- `/api/stats`
+- `/api/health`
+
+The Render deployment auto-deploys on every push to `main`.
+
+### References
+
+These Stack Overflow discussions informed the implementation:
+
+- [Building enterprise app with Node/Express](https://stackoverflow.com/questions/41875617/building-enterprise-app-with-node-express) —
+  informed the separation between controllers, services and the data layer.
+- [Downside of calling an async function without await](https://stackoverflow.com/questions/49657914/down-side-on-calling-async-function-without-await) —
+  informed the background mail call and explicit `.catch()` error handling.
+- [Redis cache vs using memory directly](https://stackoverflow.com/questions/19477821/redis-cache-vs-using-memory-directly) —
+  informed the choice of an in-memory TTL cache for this single API instance.
 
 | Method | URL | |
 |---|---|---|
