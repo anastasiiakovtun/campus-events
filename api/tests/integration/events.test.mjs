@@ -21,6 +21,13 @@ describe('Events API', () => {
     assert.deepEqual(res.body, { status: 'ok' });
   });
 
+  it('GET / serves the deployed app entry point', async () => {
+    const res = await request(app).get('/');
+
+    assert.equal(res.status, 200);
+    assert.match(res.headers['content-type'], /html|json/);
+  });
+
   it('GET /events lists the events by start date, soonest first', async () => {
     await request(app).post('/api/events').send(validEvent({ title: 'Later', startsAt: inDays(20) }));
     await request(app).post('/api/events').send(validEvent({ title: 'Sooner', startsAt: inDays(2) }));

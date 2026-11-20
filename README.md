@@ -56,7 +56,12 @@ so the browser only talks to one address and you don't need CORS.
 
 ## Assignment: what I changed
 
+**Live app:** https://campus-events-1-g4or.onrender.com/
 **Live API:** https://campus-events-1-g4or.onrender.com/api (try `/api/events`, `/api/stats`, `/api/health`)
+
+For a single Render web service, use `npm run build` as the build command and
+`npm run start -w api` as the start command. The API serves `web/dist` after the
+frontend build, including Vue Router's direct browser routes.
 
 1. **Clean up and split logic.** `api/src/app.mjs` was split into layers:
    routes → controllers → services → repositories → models, plus `middleware/` (validation, error handling,
