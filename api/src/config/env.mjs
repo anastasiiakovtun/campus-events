@@ -7,11 +7,15 @@ if (process.env.NODE_ENV !== 'test') {
   }
 }
 
+const nodeEnv = process.env.NODE_ENV || 'development';
+
 export const env = {
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
   port: Number(process.env.PORT) || 3000,
   logLevel: process.env.LOG_LEVEL || 'info',
-  dbStorage: process.env.DB_STORAGE || './data/events.sqlite',
+  // Integration tests reset tables, so they must never connect to saved data.
+  databaseUrl: nodeEnv === 'test' ? '' : process.env.DATABASE_URL || '',
+  dbStorage: nodeEnv === 'test' ? ':memory:' : process.env.DB_STORAGE || './data/events.sqlite',
   // Mail server address, e.g. smtps://user:password@smtp.example.com. Empty = don't really send.
   smtpUrl: process.env.SMTP_URL || '',
   mailFrom: process.env.MAIL_FROM || 'Campus Events <no-reply@campus-events.test>',

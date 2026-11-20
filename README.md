@@ -4,7 +4,7 @@ Starter project for **Advanced Development** (Thomas More – International Expe
 
 A small but complete web app: students browse campus events and register for them.
 
-- **api/** : REST API: Node.js, Express 5, Sequelize + SQLite, Zod
+- **api/** : REST API: Node.js, Express 5, Sequelize + SQLite locally / PostgreSQL online, Zod
 - **web/** : frontend: Vue 3, Vue Router, Vite
 
 It works out of the box, and it has tests. The API has been cleaned up, deployed to production, fixed and extended
@@ -59,9 +59,39 @@ so the browser only talks to one address and you don't need CORS.
 **Live app:** https://campus-events-1-g4or.onrender.com/
 **Live API:** https://campus-events-1-g4or.onrender.com/api (try `/api/events`, `/api/stats`, `/api/health`)
 
-For a single Render web service, use `npm run build` as the build command and
+For a single Render web service, leave Root Directory empty, use
+`npm ci --include=dev && npm run build` as the build command and
 `npm run start -w api` as the start command. The API serves `web/dist` after the
 frontend build, including Vue Router's direct browser routes.
+
+### Persistent database on Render
+
+Render's free web service does not preserve local SQLite changes across restarts
+or redeployments. Use a separate PostgreSQL database, such as Neon's Free plan:
+
+1. Create a Neon PostgreSQL project and copy its connection URL from **Connect**.
+2. In the Render service's **Environment** settings, add `DATABASE_URL` with that
+   URL. Keep the URL's `sslmode=require` parameter and never commit credentials.
+3. Deploy the PostgreSQL connection code, then save the environment setting and
+   redeploy. When `DATABASE_URL` is set, the API uses PostgreSQL with TLS and
+   certificate verification; otherwise it uses the local SQLite file.
+
+The API creates missing tables and adds demo data if there are no events. This
+starts a separate database: existing SQLite events and registrations are **not
+automatically transferred**. Export any data you need before switching or
+redeploying the current SQLite service. `npm run seed` resets whichever database
+is configured, so do not run it against hosted data you want to keep.
+
+Tests always use in-memory SQLite when `NODE_ENV=test`, ignoring `DATABASE_URL`
+and `DB_STORAGE` to avoid resetting a real database.
+
+To verify persistence after setup, create a clearly labelled test event and
+register a test person through the website. Note the event ID and seat count,
+restart the Render web service, and confirm that the same event and registration
+remain. Use test details rather than a real person's contact information.
+
+References: [Render storage](https://render.com/docs/free#local-files-lost-on-redeploy),
+[Neon with Sequelize](https://neon.com/docs/guides/sequelize).
 
 1. **Clean up and split logic.** `api/src/app.mjs` was split into layers:
    routes → controllers → services → repositories → models, plus `middleware/` (validation, error handling,

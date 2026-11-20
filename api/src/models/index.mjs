@@ -1,12 +1,18 @@
 import { DataTypes, Sequelize } from 'sequelize';
 import { env } from '../config/env.mjs';
 
-// The connection to the database.
-export const sequelize = new Sequelize({
-  dialect: 'sqlite',
-  storage: env.dbStorage,
-  logging: false
-});
+// Render uses hosted PostgreSQL; local development defaults to a SQLite file.
+export const sequelize = env.databaseUrl
+  ? new Sequelize(env.databaseUrl, {
+    dialect: 'postgres',
+    logging: false,
+    dialectOptions: { ssl: { rejectUnauthorized: true } }
+  })
+  : new Sequelize({
+    dialect: 'sqlite',
+    storage: env.dbStorage,
+    logging: false
+  });
 
 // The "events" table and its columns.
 export const Event = sequelize.define('Event', {
