@@ -9,6 +9,8 @@ node_modules/
 
 # Local data & output
 **/data/*.sqlite
+# Live exports can contain registrants' names and email addresses.
+.local-backups/
 dist/
 coverage/
 *.log
