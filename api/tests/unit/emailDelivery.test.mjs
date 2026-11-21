@@ -9,6 +9,7 @@ import { processEmailJobs, EMAIL_LEASE_MS } from '../../src/services/emailDelive
 import { register } from '../../src/services/registrationsService.mjs';
 import { createEvent } from '../../src/services/eventsService.mjs';
 import { createEmailSender } from '../../src/utils/mailer.mjs';
+import { logger } from '../../src/utils/logger.mjs';
 import { createTestApp, validEvent } from '../helpers/testApp.mjs';
 import { createSmtpServer } from '../helpers/smtpServer.mjs';
 
@@ -94,6 +95,33 @@ describe('Durable confirmation delivery', () => {
     const messageId = (message) => message.match(/^Message-ID: (.+)$/im)?.[1];
     assert.ok(messageId(smtp.attempts[0]));
     assert.equal(messageId(smtp.attempts[0]), messageId(smtp.attempts[1]));
+  });
+
+  it('logs only safe SMTP diagnostics for authentication failures', async (t) => {
+    const warnings = [];
+    t.mock.method(logger, 'warn', (message, details) => warnings.push({ message, details }));
+    const failures = [
+      { responseCode: 525, command: 'AUTH LOGIN', smtpStage: 'AUTH' },
+      { responseCode: 535, command: 'AUTH PLAIN sensitive-payload', smtpStage: 'AUTH' },
+      { responseCode: '535 sensitive-payload', command: 'sensitive-payload', smtpStage: undefined }
+    ];
+    for (const failure of failures) {
+      const send = async () => {
+        throw Object.assign(new Error('sensitive-payload'), {
+          code: 'EAUTH', command: failure.command, responseCode: failure.responseCode,
+          response: 'sensitive-payload', password: 'sensitive-payload'
+        });
+      };
+      assert.equal((await processEmailJobs({ send, clock })).retried, 1);
+      const saved = await EmailJob.findByPk(job.id);
+      const warning = warnings.at(-1);
+      assert.equal(warning.details.responseCode, Number.isInteger(failure.responseCode) ? failure.responseCode : undefined);
+      assert.equal(warning.details.smtpStage, failure.smtpStage);
+      assert.equal(warning.details.nextAttemptAt, saved.nextAttemptAt.toISOString());
+      assert.doesNotMatch(JSON.stringify(warning), /sensitive-payload/);
+      assert.equal(saved.lastError, 'EAUTH');
+      now = saved.nextAttemptAt;
+    }
   });
 
   it('allows only one of two competing workers to send a pending job', async () => {

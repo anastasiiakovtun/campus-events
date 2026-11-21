@@ -6,6 +6,15 @@ import { sendEmailJob } from '../utils/mailer.mjs';
 export const EMAIL_LEASE_MS = 120_000;
 const errorCode = (error) => String(error?.code || error?.name || 'SEND_FAILED').slice(0, 100);
 
+function smtpDiagnostics(error) {
+  const responseCode = Number.isInteger(error?.responseCode) && error.responseCode >= 100 && error.responseCode <= 599
+    ? error.responseCode : undefined;
+  // AUTH commands and server responses can contain credentials; log only the stage.
+  const command = typeof error?.command === 'string' ? error.command : '';
+  const smtpStage = /^(CONN|EHLO|HELO|STARTTLS|AUTH|MAIL|RCPT|DATA|QUIT)(?:\s|$)/.exec(command)?.[1];
+  return { responseCode, smtpStage };
+}
+
 function keepLeaseAlive(job, clock, leaseMs) {
   let renewing = false;
   let renewal = Promise.resolve();
@@ -29,7 +38,10 @@ async function deferJob(job, error, clock) {
   const code = errorCode(error);
   const updated = await emailJobsRepository.retry(job.id, job.lockToken, nextAttemptAt, code);
   if (!updated) return 'skipped';
-  logger.warn('confirmation mail scheduled for retry', { jobId: job.id, attempts: job.attempts, code });
+  logger.warn('confirmation mail scheduled for retry', {
+    jobId: job.id, attempts: job.attempts, code, ...smtpDiagnostics(error),
+    nextAttemptAt: nextAttemptAt.toISOString()
+  });
   return 'retried';
 }
 
