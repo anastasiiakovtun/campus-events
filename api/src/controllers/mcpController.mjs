@@ -2,6 +2,9 @@ import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { z } from 'zod';
 import { listEventsByPeriod } from '../services/eventsService.mjs';
+import { register } from '../services/registrationsService.mjs';
+import { registrationSchema } from '../middleware/validate.mjs';
+import { AppError } from '../utils/AppError.mjs';
 import { logger } from '../utils/logger.mjs';
 
 function createServer() {
@@ -25,6 +28,25 @@ function createServer() {
       }
     });
   }
+  server.registerTool('register_for_event', {
+    description: 'Register exactly one attendee for a campus event and queue a confirmation email. ' +
+      'Confirm the event ID, name and email with the user before calling; never guess identities. ' +
+      'For a group request, establish every identity and obtain agreement before making separate calls; calls are not a group transaction.',
+    inputSchema: registrationSchema.extend({ eventId: z.number().int().positive() }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
+  }, async ({ eventId, name, email }) => {
+    try {
+      const data = { registration: await register(eventId, { name, email }) };
+      return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data };
+    } catch (error) {
+      const known = error instanceof AppError;
+      if (!known) logger.error('MCP registration failed');
+      const data = { error: known
+        ? { code: error.code, message: error.message, ...(error.details ? { details: error.details } : {}) }
+        : { code: 'INTERNAL_ERROR', message: 'Unable to register attendee' } };
+      return { isError: true, content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data };
+    }
+  });
   return server;
 }
 

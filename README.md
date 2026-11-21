@@ -16,9 +16,9 @@ at Thomas More.
 - Save confirmation emails durably and retry SMTP failures in the background.
 - Cache GET responses in memory with a configurable TTL and invalidation after writes.
 - Store data in SQLite locally or PostgreSQL when `DATABASE_URL` is configured.
-- Query upcoming and past events through read-only MCP tools.
+- Query upcoming and past events and register an attendee through MCP tools.
 
-MCP registration and real-time notifications are not implemented yet.
+Real-time notifications are not implemented yet.
 See [current limitations](#current-limitations).
 
 ## Setup
@@ -174,19 +174,35 @@ missing resources return 404, and duplicate registrations or full events return
 ### MCP event tools
 
 The MCP endpoint is `/api/mcp`, served by the official MCP SDK over Streamable
-HTTP. It is stateless and exposes the same public event data as the REST API,
-without attendee names or email addresses. No authentication is required for
-these two read-only tools.
+HTTP. It is stateless. The two listing tools expose public event data without
+attendee names or email addresses; the registration tool returns the attendee
+record it creates. Like the current REST API, these tools do not require
+authentication.
 
 | Tool | Result |
 | --- | --- |
 | `get_upcoming_events` | Events starting at or after the current instant, soonest first. |
 | `get_past_events` | Events starting before the current instant, oldest first. |
+| `register_for_event` | Registers one attendee using the existing registration service and queues a confirmation email. |
 
-Both tools accept an empty object (`{}`) and return `{ events: [...] }` as
+The two listing tools accept an empty object (`{}`) and return `{ events: [...] }` as
 structured content and JSON text. Each event includes `registered` and
 `spotsLeft`. Dates are compared as instants, independently of timezone offsets.
 Filtering happens on every call, even when the underlying event list is cached.
+
+`register_for_event` requires `eventId` (a positive integer), `name`, and `email`.
+It reuses the website's name/email validation, name trimming, email normalization,
+duplicate checks, capacity rules, cache invalidation, and transactional email
+outbox. Success returns `{ registration: {...} }` as structured content and JSON
+text; it means registration is saved and confirmation mail is queued, not yet
+delivered. Known service errors preserve codes such as `CONFLICT` and `NOT_FOUND`.
+
+The tool is marked as writing data and not idempotent: repeating a completed
+registration returns a duplicate error instead of creating another registration
+or email job. Assistants should confirm the event and each attendee's identity
+before calling. A call registers one person; separate calls for a group are not
+atomic, so they can partially succeed. Concurrent capacity and duplicate
+protection retain the limitations described below.
 
 Configure an MCP client with the endpoint URL
 `https://campus-events-1-g4or.onrender.com/api/mcp` (locally,
@@ -231,6 +247,8 @@ and recovery. Coverage includes API behavior, outbox transactions, retries, work
 coordination, cache invalidation, env loading, branch policy, and Vue components.
 MCP tests cover date boundaries, seat counts, privacy, invalid calls, header
 validation, safe failures, and a real HTTP connection with the official client.
+Registration tests also cover input normalization, REST/MCP duplicate protection,
+full or missing events, saved email jobs, and rollback when enqueueing fails.
 
 The GitLab CI configuration in [.gitlab-ci.yml](.gitlab-ci.yml) runs lint and tests.
 For manual persistence checks, see [Deployment](#deployment).
@@ -272,5 +290,4 @@ See [Render's network limitations](https://render.com/docs/free#other-limitation
   reservation. Concurrent requests can bypass capacity or duplicate checks.
 - The in-memory cache belongs to one API process; invalidation is not shared
   across multiple instances.
-- The `register_for_event` MCP tool, SSE notifications, and Redis-backed
-  notification distribution remain planned work.
+- SSE notifications and Redis-backed notification distribution remain planned work.

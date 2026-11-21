@@ -38,15 +38,17 @@ describe('MCP event tools over HTTP', () => {
     return data.result;
   }
 
-  it('initializes and discovers exactly the two read-only event tools', async () => {
+  it('initializes and discovers the two read-only tools and registration tool', async () => {
     const { response, data } = await rpc('initialize', {
       protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'test', version: '1.0.0' }
     });
     assert.equal(response.status, 200);
     assert.equal(data.result.serverInfo.name, 'campus-events');
     const listed = await rpc('tools/list');
-    assert.deepEqual(listed.data.result.tools.map((tool) => tool.name).sort(), ['get_past_events', 'get_upcoming_events']);
-    for (const tool of listed.data.result.tools) assert.equal(tool.annotations.readOnlyHint, true);
+    assert.deepEqual(listed.data.result.tools.map((tool) => tool.name).sort(), ['get_past_events', 'get_upcoming_events', 'register_for_event']);
+    for (const tool of listed.data.result.tools) {
+      assert.equal(tool.annotations.readOnlyHint, tool.name !== 'register_for_event');
+    }
   });
 
   it('lists the right period in date order with seats and no attendee details', async () => {
@@ -97,7 +99,7 @@ describe('MCP event tools over HTTP', () => {
   });
 
   it('rejects unknown tools and unexpected arguments', async () => {
-    const unknown = await rpc('tools/call', { name: 'register_for_event', arguments: {} });
+    const unknown = await rpc('tools/call', { name: 'unknown_tool', arguments: {} });
     assert.equal(unknown.data.error.code, -32602);
     const invalid = await callTool('get_upcoming_events', { period: 'past' });
     assert.equal(invalid.isError, true);
@@ -126,7 +128,7 @@ describe('MCP event tools over HTTP', () => {
     try {
       const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.address().port}/api/mcp`));
       await client.connect(transport);
-      assert.equal((await client.listTools()).tools.length, 2);
+      assert.equal((await client.listTools()).tools.length, 3);
       const result = await client.callTool({ name: 'get_upcoming_events', arguments: {} });
       assert.equal(result.structuredContent.events[0].id, event.id);
       assert.deepEqual((await client.callTool({ name: 'get_past_events', arguments: {} })).structuredContent.events, []);
