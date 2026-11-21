@@ -29,6 +29,16 @@ export function listEvents() {
   return cache.remember(keys.allEvents, env.cacheTtlSeconds, () => eventsRepository.findAll());
 }
 
+// Filter at call time: a cached event can become past while the list stays cached.
+export async function listEventsByPeriod(period, now = new Date()) {
+  const events = await listEvents();
+  const matches = events.filter((event) => {
+    const upcoming = new Date(event.startsAt).getTime() >= now.getTime();
+    return period === 'upcoming' ? upcoming : !upcoming;
+  });
+  return Promise.all(matches.map((event) => getEvent(event.id)));
+}
+
 // One event, plus how many people are registered and how many seats are left.
 // A 404 throws inside load(), so "not found" is never stored in the cache.
 export function getEvent(id) {

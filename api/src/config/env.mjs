@@ -29,6 +29,9 @@ export const env = {
   nodeEnv,
   port: Number(process.env.PORT) || 3000,
   logLevel: process.env.LOG_LEVEL || 'info',
+  mcpAllowedHosts: (process.env.MCP_ALLOWED_HOSTS ||
+    ['localhost', '127.0.0.1', '[::1]', process.env.RENDER_EXTERNAL_HOSTNAME].filter(Boolean).join(','))
+    .split(',').map((host) => host.trim().toLowerCase()).filter(Boolean),
   // Integration tests reset tables, so they must never connect to saved data.
   databaseUrl: nodeEnv === 'test' ? '' : process.env.DATABASE_URL || '',
   dbStorage: nodeEnv === 'test' ? ':memory:' : process.env.DB_STORAGE || './data/events.sqlite',

@@ -16,8 +16,9 @@ at Thomas More.
 - Save confirmation emails durably and retry SMTP failures in the background.
 - Cache GET responses in memory with a configurable TTL and invalidation after writes.
 - Store data in SQLite locally or PostgreSQL when `DATABASE_URL` is configured.
+- Query upcoming and past events through read-only MCP tools.
 
-MCP tools and real-time notifications are not implemented yet.
+MCP registration and real-time notifications are not implemented yet.
 See [current limitations](#current-limitations).
 
 ## Setup
@@ -87,6 +88,7 @@ of the startup directory. Keep credentials and connection URLs out of Git.
 | `MAIL_RETRY_MAX_SECONDS` | `3600` | Maximum exponential retry delay. |
 | `CACHE_TTL_SECONDS` | `60` | Lifetime of cached GET responses. |
 | `LOG_LEVEL` | `info` | Application logging level. |
+| `MCP_ALLOWED_HOSTS` | Localhost addresses and `RENDER_EXTERNAL_HOSTNAME`, when set | Comma-separated hostnames allowed in MCP Host and Origin headers; an explicit value replaces the defaults. |
 
 Changing the API port also requires updating the proxy target in
 [web/vite.config.js](web/vite.config.js) for local frontend requests.
@@ -169,6 +171,44 @@ missing resources return 404, and duplicate registrations or full events return
 }
 ```
 
+### MCP event tools
+
+The MCP endpoint is `/api/mcp`, served by the official MCP SDK over Streamable
+HTTP. It is stateless and exposes the same public event data as the REST API,
+without attendee names or email addresses. No authentication is required for
+these two read-only tools.
+
+| Tool | Result |
+| --- | --- |
+| `get_upcoming_events` | Events starting at or after the current instant, soonest first. |
+| `get_past_events` | Events starting before the current instant, oldest first. |
+
+Both tools accept an empty object (`{}`) and return `{ events: [...] }` as
+structured content and JSON text. Each event includes `registered` and
+`spotsLeft`. Dates are compared as instants, independently of timezone offsets.
+Filtering happens on every call, even when the underlying event list is cached.
+
+Configure an MCP client with the endpoint URL
+`https://campus-events-1-g4or.onrender.com/api/mcp` (locally,
+`http://localhost:3000/api/mcp`). This is a protocol endpoint, not a browser page.
+The SDK supports modern clients and stateless 2025 Streamable HTTP clients.
+For example, discover the tools from a local running API:
+
+```bash
+curl http://localhost:3000/api/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+Responses may use SSE framing (`data: {...}`). Invalid tool calls use MCP's
+JSON-RPC errors; tool execution failures return `isError: true` with the project's
+`{ error: { code, message } }` envelope and no internal database details.
+Untrusted Host or Origin headers receive HTTP 403. For a custom hostname, set
+`MCP_ALLOWED_HOSTS` to every hostname you intend to allow, including localhost
+if needed; omit schemes and ports. Non-browser clients may omit Origin.
+
 ## Testing
 
 Run commands from the repository root:
@@ -189,6 +229,8 @@ API tests run with `NODE_ENV=test`, which forces in-memory SQLite and ignores
 Redis, RabbitMQ, or an external SMTP service. A local SMTP fixture tests rejection
 and recovery. Coverage includes API behavior, outbox transactions, retries, worker
 coordination, cache invalidation, env loading, branch policy, and Vue components.
+MCP tests cover date boundaries, seat counts, privacy, invalid calls, header
+validation, safe failures, and a real HTTP connection with the official client.
 
 The GitLab CI configuration in [.gitlab-ci.yml](.gitlab-ci.yml) runs lint and tests.
 For manual persistence checks, see [Deployment](#deployment).
@@ -230,4 +272,5 @@ See [Render's network limitations](https://render.com/docs/free#other-limitation
   reservation. Concurrent requests can bypass capacity or duplicate checks.
 - The in-memory cache belongs to one API process; invalidation is not shared
   across multiple instances.
-- MCP tools, SSE notifications, and Redis-backed notification distribution remain planned work.
+- The `register_for_event` MCP tool, SSE notifications, and Redis-backed
+  notification distribution remain planned work.

@@ -118,6 +118,16 @@ describe('Environment file loading', () => {
     assert.equal(env.mailRetryMaxMs, 120_000);
   });
 
+  it('allows local MCP clients and the Render service hostname by default', () => {
+    const env = inspectEnvironment(directory, { RENDER_EXTERNAL_HOSTNAME: 'campus-events.example.com' });
+    assert.deepEqual(env.mcpAllowedHosts, ['localhost', '127.0.0.1', '[::1]', 'campus-events.example.com']);
+  });
+
+  it('uses explicitly configured MCP hostnames instead of the defaults', () => {
+    const env = inspectEnvironment(directory, { MCP_ALLOWED_HOSTS: ' API.EXAMPLE.COM, localhost, ' });
+    assert.deepEqual(env.mcpAllowedHosts, ['api.example.com', 'localhost']);
+  });
+
   it('uses default email intervals for invalid timer values', () => {
     const env = inspectEnvironment(directory, {
       MAIL_POLL_INTERVAL_SECONDS: 'Infinity', MAIL_RETRY_BASE_SECONDS: '-1', MAIL_RETRY_MAX_SECONDS: '0'
