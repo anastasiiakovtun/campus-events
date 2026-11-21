@@ -90,6 +90,13 @@ register a test person through the website. Note the event ID and seat count,
 restart the Render web service, and confirm that the same event and registration
 remain. Use test details rather than a real person's contact information.
 
+**Verified on 21 November 2026:** creating a temporary event and a test
+registration through the live API returned HTTP 201, and both records were
+confirmed directly in Neon PostgreSQL. After restarting the Render service, the
+same records remained, with one registration and one seat left. The temporary
+event and its registration were then removed; the original four events and three
+registrations still matched the private backup.
+
 References: [Render storage](https://render.com/docs/free#local-files-lost-on-redeploy),
 [Neon with Sequelize](https://neon.com/docs/guides/sequelize).
 
