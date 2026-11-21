@@ -24,6 +24,14 @@ npm run dev        # starts both
 Open **http://localhost:5173**. The API runs on http://localhost:3000/api.
 The first start fills the database with demo events. `npm run seed` resets it.
 
+The API automatically reads env files relative to the repository, so starting it
+from the root or the API workspace works the same way. Priority is: injected
+environment variables, `api/.env.local`, `api/.env`, root `.env.local`, root `.env`,
+then defaults. Missing files are optional. Tests skip these files entirely.
+Neon's root `.env.local` is picked up without an extra command. If it points to
+production, local writes and `npm run seed` affect that production database too;
+use a development branch's URL to keep local data separate.
+
 Later parts need a few services. You never need them to run the tests.
 
 | Service | Local | Setting in `api/.env` |

@@ -1,9 +1,19 @@
+import { fileURLToPath } from 'node:url';
+
 // The only file that reads process.env. Everything else imports `env` from here.
-if (process.env.NODE_ENV !== 'test') {
+function loadOptionalEnvFile(relativePath) {
   try {
-    process.loadEnvFile();
-  } catch {
-    // no .env file: use the defaults below
+    process.loadEnvFile(fileURLToPath(new URL(relativePath, import.meta.url)));
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  // Existing process variables win. API-specific files take priority over root
+  // files, regardless of the directory the app was started from.
+  for (const file of ['../../.env.local', '../../.env', '../../../.env.local', '../../../.env']) {
+    loadOptionalEnvFile(file);
   }
 }
 
