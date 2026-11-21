@@ -19,8 +19,8 @@ at Thomas More.
 - Query upcoming and past events and register an attendee through MCP tools.
 - Receive anonymous live notifications for new events and registrations, with refreshed views after reconnection.
 
-Live notification delivery currently supports one API process. Redis distribution
-and durable notification publishing remain planned work.
+Live notifications reach browsers on every API instance when `REDIS_URL` is set.
+Durable notification publishing remains planned work.
 See [current limitations](#current-limitations).
 
 ## Setup
@@ -88,6 +88,7 @@ of the startup directory. Keep credentials and connection URLs out of Git.
 | `MAIL_POLL_INTERVAL_SECONDS` | `5` | Delay between completed email-worker batches. |
 | `MAIL_RETRY_BASE_SECONDS` | `30` | Initial retry delay after an SMTP failure. |
 | `MAIL_RETRY_MAX_SECONDS` | `3600` | Maximum exponential retry delay. |
+| `REDIS_URL` | Unset | Redis URL that shares live notifications between API instances; unset keeps delivery process-local. Ignored in tests. |
 | `CACHE_TTL_SECONDS` | `60` | Lifetime of cached GET responses. |
 | `LOG_LEVEL` | `info` | Application logging level. |
 | `MCP_ALLOWED_HOSTS` | Localhost addresses and `RENDER_EXTERNAL_HOSTNAME`, when set | Comma-separated hostnames allowed in MCP Host and Origin headers; an explicit value replaces the defaults. |
@@ -228,10 +229,21 @@ Network loss closes the stream; returning online opens a fresh one and refreshes
 the current page. Reopening never replays historical toasts, including when a
 client sends `Last-Event-ID`; the database remains the source of current state.
 
-This first transport is process-local and best effort. A crash between database
-commit and publish can lose a notification. Durable notification publishing,
-Redis distribution, and cache invalidation across processes are separate
-remaining tasks. Reconnection refresh recovers current state, not missed toasts.
+Without `REDIS_URL`, delivery is process-local. With it, every instance publishes
+to the Redis channel `campus-events:notifications` and forwards received messages
+to its own SSE clients. The sending instance also receives its message from Redis
+instead of delivering it directly, so each browser gets it once. Messages from
+Redis are validated again, so identity fields cannot enter the stream. A rejected
+publish falls back to local delivery only, and an unavailable Redis does not
+block API startup. Run `docker compose up -d redis` to try it locally.
+
+Delivery remains best effort. Redis Pub/Sub is not durable: an instance that is
+disconnected from Redis misses messages, and a crash between database commit and
+publish can lose a notification. The database stays the source of truth, and
+reconnection refresh recovers current state, not missed toasts. Durable
+notification publishing and cache invalidation across processes are remaining
+tasks. The automated tests use an in-memory stand-in for Redis, so verify a real
+Redis by running two API instances with the same `REDIS_URL` and different ports.
 
 ### MCP event tools
 
@@ -368,5 +380,5 @@ See [Render's network limitations](https://render.com/docs/free#other-limitation
   but run only while the API process is active and do not provide exactly-once delivery.
 - The in-memory cache belongs to one API process; invalidation is not shared
   across multiple instances.
-- Notifications are process-local and best effort; durable publishing and Redis
-  distribution across API instances remain planned work.
+- Notifications are best effort. Redis shares them across API instances when
+  `REDIS_URL` is set, but Pub/Sub is not durable; durable publishing remains planned work.
