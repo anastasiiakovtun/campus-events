@@ -32,6 +32,21 @@ Neon's root `.env.local` is picked up without an extra command. If it points to
 production, local writes and `npm run seed` affect that production database too;
 use a development branch's URL to keep local data separate.
 
+For local PostgreSQL development, keep Render's `DATABASE_URL` on `production`
+and point the local app at `development`. Once the Neon CLI is authenticated and
+this directory is linked to the project, run from the repository root:
+
+```bash
+neon checkout development --create
+npm run dev
+```
+
+Checkout updates the ignored `.neon` and `.env.local` files, not Render's
+settings. A new development branch copies production's schema and current data,
+then stores its own changes independently. The named `development` branch has no
+automatic expiry; other new temporary branches retain the seven-day expiry in
+`neon.ts`. Checking out an existing branch preserves its data.
+
 Later parts need a few services. You never need them to run the tests.
 
 | Service | Local | Setting in `api/.env` |

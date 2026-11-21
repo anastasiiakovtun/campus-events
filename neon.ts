@@ -10,6 +10,10 @@ export default defineConfig({
       return {};
     }
     if (!branch.exists) {
+      // Keep the local development database; only throwaway branches expire.
+      if (branch.name === "development") {
+        return { parent: "production" };
+      }
       // New non-default branches: auto-expire
       // Run `neon checkout <name>` to create a new branch with these settings
       return { ttl: "7d" };
