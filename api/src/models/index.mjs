@@ -27,6 +27,11 @@ export const Event = sequelize.define('Event', {
 export const Registration = sequelize.define('Registration', {
   name: { type: DataTypes.STRING(100), allowNull: false },
   email: { type: DataTypes.STRING(254), allowNull: false }
+}, {
+  indexes: [{
+    name: 'registrations_event_email_unique', unique: true,
+    fields: ['eventId', sequelize.fn('lower', sequelize.col('email'))]
+  }]
 });
 
 // Store the message itself so later event edits cannot change a pending email.

@@ -11,7 +11,7 @@ at Thomas More.
 
 - Browse and create events through the Vue interface.
 - Create, retrieve, update, and delete events through the REST API.
-- Register attendees with input validation, duplicate-email checks, and capacity checks.
+- Register attendees with input validation, atomic capacity checks, and database-enforced duplicate protection.
 - View registration counts, remaining seats, and occupancy statistics.
 - Save confirmation emails durably and retry SMTP failures in the background.
 - Cache GET responses in memory with a configurable TTL and invalidation after writes.
@@ -171,6 +171,35 @@ missing resources return 404, and duplicate registrations or full events return
 }
 ```
 
+### Concurrent registrations
+
+The REST and MCP registration paths use the same service. Event lookup,
+duplicate/capacity checks, registration, and email enqueueing share one database
+transaction. PostgreSQL locks the event row with `FOR UPDATE` at `READ COMMITTED`:
+another registration for that event waits, then checks the latest committed seat
+count. SQLite uses queued `IMMEDIATE` transactions for local development. Use
+shared PostgreSQL for multiple API instances.
+
+The database has a unique index on event ID and lowercase email. It prevents
+case-insensitive duplicates even if an insert bypasses the service. Capacity
+enforcement relies on using the registration service; direct database writes
+must respect that rule. Cache invalidation and success logging happen after
+commit, and a failed email-job insert rolls back the registration and frees the seat.
+
+Before deploying this schema change to an existing PostgreSQL database, inject
+its **direct, non-pooled** connection as `DATABASE_URL`. Audit first, then apply:
+
+```bash
+node api/scripts/migrateRegistrationUniqueness.mjs EXPECTED_DIRECT_HOST
+node api/scripts/migrateRegistrationUniqueness.mjs EXPECTED_DIRECT_HOST --apply
+```
+
+Replace `EXPECTED_DIRECT_HOST` with the database hostname, without scheme or
+credentials. The command checks the target and refuses pooled connections.
+The migration uses the model's index definition and can be applied repeatedly.
+If duplicate groups already exist it stops; it does not delete, merge, or rewrite
+attendee records. Resolve such groups deliberately before retrying.
+
 ### MCP event tools
 
 The MCP endpoint is `/api/mcp`, served by the official MCP SDK over Streamable
@@ -201,8 +230,8 @@ The tool is marked as writing data and not idempotent: repeating a completed
 registration returns a duplicate error instead of creating another registration
 or email job. Assistants should confirm the event and each attendee's identity
 before calling. A call registers one person; separate calls for a group are not
-atomic, so they can partially succeed. Concurrent capacity and duplicate
-protection retain the limitations described below.
+atomic, so they can partially succeed. Each individual call uses the concurrency
+protection described above.
 
 Configure an MCP client with the endpoint URL
 `https://campus-events-1-g4or.onrender.com/api/mcp` (locally,
@@ -249,6 +278,21 @@ MCP tests cover date boundaries, seat counts, privacy, invalid calls, header
 validation, safe failures, and a real HTTP connection with the official client.
 Registration tests also cover input normalization, REST/MCP duplicate protection,
 full or missing events, saved email jobs, and rollback when enqueueing fails.
+Concurrency tests send simultaneous REST and MCP requests for the same seats or
+email and verify conflict responses. Database tests cover the unique index and
+safe migration refusal when legacy duplicates exist.
+
+For opt-in PostgreSQL verification, point `DATABASE_URL` at a **disposable clone**
+through a direct connection and run:
+
+```bash
+node api/tests/manual/registrationConcurrency.mjs EXPECTED_DIRECT_HOST
+```
+
+This test recreates the registration index on the clone, starts two independent
+API processes, verifies concurrent registrations and email jobs, and removes its
+fixture events. It checks that the original rows remain unchanged and runs no
+SMTP worker. Never run this fixture test on production.
 
 The GitLab CI configuration in [.gitlab-ci.yml](.gitlab-ci.yml) runs lint and tests.
 For manual persistence checks, see [Deployment](#deployment).
@@ -286,8 +330,6 @@ See [Render's network limitations](https://render.com/docs/free#other-limitation
 
 - Email delivery requires a reachable SMTP service. Retries survive restarts,
   but run only while the API process is active and do not provide exactly-once delivery.
-- Registration checks are sequential application checks, not an atomic capacity
-  reservation. Concurrent requests can bypass capacity or duplicate checks.
 - The in-memory cache belongs to one API process; invalidation is not shared
   across multiple instances.
 - SSE notifications and Redis-backed notification distribution remain planned work.
