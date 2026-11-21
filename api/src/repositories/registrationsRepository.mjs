@@ -1,4 +1,4 @@
-import { Registration } from '../models/index.mjs';
+import { EmailJob, Registration, sequelize } from '../models/index.mjs';
 
 // All database work for registrations. No rules here, only reading and saving.
 
@@ -19,4 +19,19 @@ export async function countByEvent(eventId) {
 
 export async function create(data) {
   return toPlain(await Registration.create(data));
+}
+
+export async function createWithConfirmation(data, message) {
+  // Both writes commit together: a successful registration must have a mail job.
+  return sequelize.transaction(async (transaction) => {
+    const registration = await Registration.create(data, { transaction });
+    const emailJob = await EmailJob.create({
+      registrationId: registration.id,
+      recipient: registration.email,
+      subject: message.subject,
+      text: message.text
+    }, { transaction });
+
+    return { registration: toPlain(registration), emailJob: toPlain(emailJob) };
+  });
 }

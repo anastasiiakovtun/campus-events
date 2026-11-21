@@ -29,6 +29,30 @@ export const Registration = sequelize.define('Registration', {
   email: { type: DataTypes.STRING(254), allowNull: false }
 });
 
+// Store the message itself so later event edits cannot change a pending email.
+export const EmailJob = sequelize.define('EmailJob', {
+  registrationId: { type: DataTypes.INTEGER, allowNull: false, unique: true },
+  recipient: { type: DataTypes.STRING(254), allowNull: false },
+  subject: { type: DataTypes.STRING(200), allowNull: false },
+  text: { type: DataTypes.TEXT, allowNull: false },
+  messageId: { type: DataTypes.UUID, allowNull: false, defaultValue: DataTypes.UUIDV4, unique: true },
+  status: {
+    type: DataTypes.STRING(16), allowNull: false, defaultValue: 'pending',
+    validate: { isIn: [['pending', 'processing', 'sent']] }
+  },
+  attempts: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, validate: { min: 0 } },
+  nextAttemptAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  lockedAt: { type: DataTypes.DATE, allowNull: true },
+  lockToken: { type: DataTypes.UUID, allowNull: true },
+  lastError: { type: DataTypes.TEXT, allowNull: true },
+  sentAt: { type: DataTypes.DATE, allowNull: true }
+}, {
+  indexes: [{ fields: ['status', 'nextAttemptAt'] }]
+});
+
 // One event has many registrations. Deleting an event also deletes its registrations.
 Event.hasMany(Registration, { foreignKey: { name: 'eventId', allowNull: false }, onDelete: 'CASCADE' });
 Registration.belongsTo(Event, { foreignKey: 'eventId' });
+
+Registration.hasOne(EmailJob, { foreignKey: 'registrationId', onDelete: 'CASCADE' });
+EmailJob.belongsTo(Registration, { foreignKey: 'registrationId' });
