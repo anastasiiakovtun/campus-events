@@ -8,10 +8,18 @@ const notificationSchema = z.discriminatedUnion('type', [
   z.object({ ...common, type: z.literal('registration.created'), registered: z.number().int().nonnegative(), spotsLeft: z.number().int().nonnegative() })
 ]);
 const listeners = new Set();
+// Default: one API process delivers straight to its own browsers. With Redis
+// configured, the transport fans the message out to every API instance first.
+const localTransport = { publish: deliverLocally };
+let transport = localTransport;
 
 export function subscribeNotifications(listener) {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+export function setNotificationTransport(next) {
+  transport = next ?? localTransport;
 }
 
 export function publishNotification(data) {
@@ -22,6 +30,22 @@ export function publishNotification(data) {
     return;
   }
   const notification = Object.freeze(parsed.data);
+  transport.publish(notification);
+  return notification;
+}
+
+// Messages from another instance are validated again: the channel is outside
+// this process, so it must not be able to push identity fields or bad shapes.
+export function receiveRemoteNotification(data) {
+  const parsed = notificationSchema.safeParse(data);
+  if (!parsed.success) {
+    logger.warn('Invalid remote notification omitted');
+    return;
+  }
+  deliverLocally(Object.freeze(parsed.data));
+}
+
+function deliverLocally(notification) {
   for (const listener of listeners) {
     try {
       listener(notification);
@@ -30,5 +54,4 @@ export function publishNotification(data) {
       logger.warn('Notification subscriber disconnected');
     }
   }
-  return notification;
 }

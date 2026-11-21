@@ -4,6 +4,8 @@ import { Event, sequelize } from './models/index.mjs';
 import { seedDemoData } from './models/seedData.mjs';
 import { startEmailWorker } from './workers/emailWorker.mjs';
 import { logger } from './utils/logger.mjs';
+import { startRedisNotificationBus } from './utils/redisNotificationBus.mjs';
+import { receiveRemoteNotification, setNotificationTransport } from './services/notificationsService.mjs';
 
 // Starts the API: create the tables if needed, then listen on the port.
 await sequelize.sync();
@@ -12,6 +14,11 @@ await sequelize.sync();
 if ((await Event.count()) === 0) {
   await seedDemoData();
   console.log('Empty database – demo data added');
+}
+
+if (env.redisUrl) {
+  setNotificationTransport(startRedisNotificationBus({ url: env.redisUrl, onMessage: receiveRemoteNotification }));
+  logger.info('Live notifications are shared between API instances through Redis');
 }
 
 app.listen(env.port, () => {

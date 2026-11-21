@@ -128,6 +128,12 @@ describe('Environment file loading', () => {
     assert.deepEqual(env.mcpAllowedHosts, ['api.example.com', 'localhost']);
   });
 
+  it('reads the Redis URL outside tests and ignores it during tests', () => {
+    const settings = { REDIS_URL: 'redis://fixture.invalid:6379' };
+    assert.equal(inspectEnvironment(directory, settings).redisUrl, 'redis://fixture.invalid:6379');
+    assert.equal(inspectEnvironment(directory, { ...settings, NODE_ENV: 'test' }).redisUrl, '');
+  });
+
   it('uses default email intervals for invalid timer values', () => {
     const env = inspectEnvironment(directory, {
       MAIL_POLL_INTERVAL_SECONDS: 'Infinity', MAIL_RETRY_BASE_SECONDS: '-1', MAIL_RETRY_MAX_SECONDS: '0'

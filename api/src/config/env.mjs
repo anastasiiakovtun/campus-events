@@ -34,6 +34,9 @@ export const env = {
     .split(',').map((host) => host.trim().toLowerCase()).filter(Boolean),
   // Integration tests reset tables, so they must never connect to saved data.
   databaseUrl: nodeEnv === 'test' ? '' : process.env.DATABASE_URL || '',
+  // Set when several API instances run, so live notifications reach all of them.
+  // Tests use a fake broker and must never publish to a shared Redis.
+  redisUrl: nodeEnv === 'test' ? '' : process.env.REDIS_URL || '',
   dbStorage: nodeEnv === 'test' ? ':memory:' : process.env.DB_STORAGE || './data/events.sqlite',
   // Missing SMTP leaves confirmation jobs pending instead of simulating delivery.
   smtpUrl: process.env.SMTP_URL || '',
