@@ -11,6 +11,8 @@ node_modules/
 **/data/*.sqlite
 # Live exports can contain registrants' names and email addresses.
 .local-backups/
+# Local coursework notes are not part of the public repository.
+/docs/assignment.md
 dist/
 coverage/
 *.log
