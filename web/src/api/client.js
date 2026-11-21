@@ -1,6 +1,6 @@
 // One place for all HTTP calls. Turns the API error format
 // { error: { code, message, details } } into an ApiError you can show in the UI.
-const BASE_URL = '/api';
+export const BASE_URL = '/api';
 
 export class ApiError extends Error {
   constructor(status, { code, message, details } = {}) {

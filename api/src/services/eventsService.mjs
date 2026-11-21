@@ -3,6 +3,7 @@ import * as eventsRepository from '../repositories/eventsRepository.mjs';
 import * as registrationsRepository from '../repositories/registrationsRepository.mjs';
 import { notFound } from '../utils/AppError.mjs';
 import * as cache from '../utils/cache.mjs';
+import { publishNotification } from './notificationsService.mjs';
 
 // Service = the "cook": the rules for events.
 // No Express (no req/res) and no database code here: it only makes decisions.
@@ -54,6 +55,7 @@ export function getEvent(id) {
 export async function createEvent(data) {
   const event = await eventsRepository.create(data);
   cache.del(keys.allEvents, keys.stats);
+  publishNotification({ type: 'event.created', eventId: event.id, title: event.title, startsAt: event.startsAt });
   return event;
 }
 

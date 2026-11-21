@@ -1,10 +1,11 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import { getEvents } from '../api/events.js';
 import ErrorMessage from '../components/ErrorMessage.vue';
 import EventCard from '../components/EventCard.vue';
 import { isPast } from '../utils/format.js';
+import { useLiveRefresh } from '../composables/useLiveRefresh.js';
 
 const events = ref([]);
 const loading = ref(true);
@@ -13,9 +14,10 @@ const error = ref(null);
 const upcoming = computed(() => events.value.filter((event) => !isPast(event.startsAt)));
 const past = computed(() => events.value.filter((event) => isPast(event.startsAt)));
 
-onMounted(async () => {
+useLiveRefresh(async () => {
   try {
     events.value = await getEvents();
+    error.value = null;
   } catch (err) {
     error.value = err;
   } finally {

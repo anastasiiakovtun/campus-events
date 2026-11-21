@@ -8,6 +8,7 @@ import { eventsRoutes } from './routes/eventsRoutes.mjs';
 import { healthRoutes } from './routes/healthRoutes.mjs';
 import { statsRoutes } from './routes/statsRoutes.mjs';
 import { mcpRoutes } from './routes/mcpRoutes.mjs';
+import { notificationsRoutes } from './routes/notificationsRoutes.mjs';
 
 // The app only wires the pieces together. Every job lives in its own folder:
 // routes → controllers → services → repositories → models.
@@ -25,6 +26,7 @@ app.use('/api/health', healthRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/mcp', mcpRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // In production Render builds the Vue app before starting this API. Serving it
 // here keeps the website and API on one origin, while the JSON fallback keeps

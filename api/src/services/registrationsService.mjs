@@ -5,6 +5,7 @@ import * as cache from '../utils/cache.mjs';
 import { logger } from '../utils/logger.mjs';
 import { buildRegistrationConfirmation } from '../utils/mailer.mjs';
 import { findEventOrFail, keys } from './eventsService.mjs';
+import { publishNotification } from './notificationsService.mjs';
 
 // Service = the rules for registrations.
 
@@ -21,19 +22,24 @@ export function listRegistrations(eventId) {
 // Checked like a list, from top to bottom (early returns, no nested ifs):
 // 1. event exists?  2. not registered yet?  3. seats left?  4. save.
 export async function register(eventId, { name, email }) {
-  const registration = await registrationsRepository.withEventLock(eventId, async (event, store) => {
+  const { registration, notification } = await registrationsRepository.withEventLock(eventId, async (event, store) => {
     if (!event) throw notFound(`Event with id ${eventId} not found`);
     const existing = await store.findByEmail(email);
     if (existing) throw conflict(`${email} is already registered for this event`);
     const registered = await store.count();
     if (registered >= event.capacity) throw conflict('Event is full');
     const message = buildRegistrationConfirmation({ name }, event);
-    return (await store.createWithConfirmation({ name, email }, message)).registration;
+    const { registration } = await store.createWithConfirmation({ name, email }, message);
+    return { registration, notification: {
+      type: 'registration.created', eventId: event.id, title: event.title,
+      registered: registered + 1, spotsLeft: Math.max(event.capacity - registered - 1, 0)
+    } };
   });
   // Seats left, the list of people and the stats are now out of date.
   cache.del(keys.event(eventId), keys.registrations(eventId), keys.stats);
   // Only ids in the log, no name or email: personal data doesn't belong in logs (privacy).
   logger.info('new registration', { eventId, registrationId: registration.id });
+  publishNotification(notification);
 
   return registration;
 }

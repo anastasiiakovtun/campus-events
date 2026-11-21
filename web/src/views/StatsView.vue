@@ -1,15 +1,17 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import { getStats } from '../api/events.js';
 import ErrorMessage from '../components/ErrorMessage.vue';
+import { useLiveRefresh } from '../composables/useLiveRefresh.js';
 
 const stats = ref([]);
 const error = ref(null);
 
-onMounted(async () => {
+useLiveRefresh(async () => {
   try {
     stats.value = await getStats();
+    error.value = null;
   } catch (err) {
     error.value = err;
   }

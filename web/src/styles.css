@@ -165,6 +165,13 @@ a { color: var(--accent); }
 .status--full { color: var(--full); }
 .status--past { color: var(--muted); }
 
+/* Live updates share the app's surfaces and remain usable on narrow screens. */
+.notifications { position: fixed; right: 1rem; bottom: 1rem; width: min(24rem, calc(100vw - 2rem)); z-index: 10; }
+.notifications__list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem; }
+.notification { position: relative; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 1rem 2.5rem 1rem 1rem; box-shadow: 0 4px 16px #18202b1a; }
+.notification p { margin: 0.35rem 0; overflow-wrap: anywhere; }
+.notification__dismiss { position: absolute; top: 0.35rem; right: 0.35rem; width: 2rem; height: 2rem; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font: inherit; font-size: 1.5rem; cursor: pointer; }
+
 @media (prefers-reduced-motion: reduce) {
   .ticket { transition: none; }
   .ticket:hover { transform: none; }

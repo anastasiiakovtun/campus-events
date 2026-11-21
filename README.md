@@ -17,8 +17,10 @@ at Thomas More.
 - Cache GET responses in memory with a configurable TTL and invalidation after writes.
 - Store data in SQLite locally or PostgreSQL when `DATABASE_URL` is configured.
 - Query upcoming and past events and register an attendee through MCP tools.
+- Receive anonymous live notifications for new events and registrations, with refreshed views after reconnection.
 
-Real-time notifications are not implemented yet.
+Live notification delivery currently supports one API process. Redis distribution
+and durable notification publishing remain planned work.
 See [current limitations](#current-limitations).
 
 ## Setup
@@ -152,6 +154,7 @@ All API routes use the `/api` prefix. There is no API index at `/api`.
 | GET / PATCH / DELETE | `/api/events/:id` | Retrieve, partially update, or delete an event. |
 | GET / POST | `/api/events/:id/registrations` | List registrations / register an attendee. |
 | GET | `/api/stats` | Event occupancy and availability statistics. |
+| GET | `/api/notifications` | SSE stream for public creation and registration notifications. |
 
 Creating an event requires `title`, `location`, `startsAt`, and `capacity`.
 `description` is optional. Supply `startsAt` as an ISO 8601 date-time string and
@@ -199,6 +202,36 @@ credentials. The command checks the target and refuses pooled connections.
 The migration uses the model's index definition and can be applied repeatedly.
 If duplicate groups already exist it stops; it does not delete, merge, or rewrite
 attendee records. Resolve such groups deliberately before retrying.
+
+### Live notifications
+
+The Vue app opens one `EventSource` connection to `/api/notifications`. Successful
+event creation and committed registration emit a message to every connected
+browser on that API process. Registration notifications contain the public event
+ID/title, registration count, and remaining seats; they do not contain attendee
+names, emails, or registration IDs. Each message has a UUID and occurrence time.
+Creation notifications also include the event start time.
+
+The stream sends `event: notification` with a JSON payload and matching SSE `id`.
+It starts with `event: ready`, sends a heartbeat comment every 15 seconds, and
+advertises a three-second reconnect delay. Disconnected or slow clients are
+removed instead of accumulating buffered messages.
+
+Toasts render text safely, link to the event, and can be dismissed. A page keeps
+the latest 1,000 message IDs to suppress repeat toasts, including after dismissal.
+At most four toasts remain visible, each for eight seconds. The event list,
+detail page, and occupancy view refresh through the REST API on notification or
+stream opening. Refreshes are serialized and bursts coalesced so an older
+overlapping response cannot replace a newer one.
+
+Network loss closes the stream; returning online opens a fresh one and refreshes
+the current page. Reopening never replays historical toasts, including when a
+client sends `Last-Event-ID`; the database remains the source of current state.
+
+This first transport is process-local and best effort. A crash between database
+commit and publish can lose a notification. Durable notification publishing,
+Redis distribution, and cache invalidation across processes are separate
+remaining tasks. Reconnection refresh recovers current state, not missed toasts.
 
 ### MCP event tools
 
@@ -281,6 +314,9 @@ full or missing events, saved email jobs, and rollback when enqueueing fails.
 Concurrency tests send simultaneous REST and MCP requests for the same seats or
 email and verify conflict responses. Database tests cover the unique index and
 safe migration refusal when legacy duplicates exist.
+SSE tests open two real HTTP streams and verify fan-out, privacy, commit/rollback
+behavior, and no history replay. Browser tests cover deduplication, cleanup,
+network recovery, and coalesced refreshes.
 
 For opt-in PostgreSQL verification, point `DATABASE_URL` at a **disposable clone**
 through a direct connection and run:
@@ -332,4 +368,5 @@ See [Render's network limitations](https://render.com/docs/free#other-limitation
   but run only while the API process is active and do not provide exactly-once delivery.
 - The in-memory cache belongs to one API process; invalidation is not shared
   across multiple instances.
-- SSE notifications and Redis-backed notification distribution remain planned work.
+- Notifications are process-local and best effort; durable publishing and Redis
+  distribution across API instances remain planned work.

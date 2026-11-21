@@ -1,11 +1,12 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import { getEvent, getRegistrations } from '../api/events.js';
 import ErrorMessage from '../components/ErrorMessage.vue';
 import RegistrationForm from '../components/RegistrationForm.vue';
 import SeatMeter from '../components/SeatMeter.vue';
 import { formatFullDate, formatTime, isPast } from '../utils/format.js';
+import { useLiveRefresh } from '../composables/useLiveRefresh.js';
 
 const props = defineProps({
   id: { type: String, required: true }
@@ -18,12 +19,14 @@ const error = ref(null);
 async function load() {
   try {
     [event.value, registrations.value] = await Promise.all([getEvent(props.id), getRegistrations(props.id)]);
+    error.value = null;
   } catch (err) {
     error.value = err;
   }
 }
 
-onMounted(load);
+const refresh = useLiveRefresh(load);
+watch(() => props.id, refresh);
 </script>
 
 <template>
@@ -47,7 +50,7 @@ onMounted(load);
     <aside class="detail__side">
       <SeatMeter :capacity="event.capacity" :registered="event.registered" />
       <p v-if="isPast(event.startsAt)" class="muted">This event has already taken place.</p>
-      <RegistrationForm v-else :event-id="event.id" @registered="load" />
+      <RegistrationForm v-else :event-id="event.id" @registered="refresh" />
     </aside>
   </article>
 </template>
