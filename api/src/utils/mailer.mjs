@@ -1,26 +1,32 @@
 import nodemailer from 'nodemailer';
 import { env } from '../config/env.mjs';
-import { logger } from './logger.mjs';
 
-// The connection to the mail server.
-// Without SMTP_URL (tests, local development) nodemailer only builds the mail as JSON
-// and sends nothing, so you don't need a mail server to work on the project.
-const transporter = env.smtpUrl
-  ? nodemailer.createTransport(env.smtpUrl)
-  : nodemailer.createTransport({ jsonTransport: true });
+const transporter = env.smtpUrl ? nodemailer.createTransport({
+  url: env.smtpUrl, connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 30_000
+}) : null;
 
-// Send the "you are registered" mail. Throws when the mail server fails or is offline;
-// the caller decides what to do with that error.
-export async function sendRegistrationConfirmation(registration, event) {
-  const info = await transporter.sendMail({
-    from: env.mailFrom,
-    to: registration.email,
+export function buildRegistrationConfirmation(registration, event) {
+  return {
     subject: `You are registered for ${event.title}`,
     text: `Hi ${registration.name},\n\nYou are registered for ${event.title} in ${event.location}.\n\nSee you there!`
-  });
-  // Ethereal (the test inbox) gives a link to read the mail in the browser; other servers give nothing.
-  logger.info('confirmation mail sent', {
-    registrationId: registration.id,
-    previewUrl: nodemailer.getTestMessageUrl(info) || undefined
-  });
+  };
 }
+
+export function createEmailSender(transport = transporter) {
+  return async (job) => {
+    if (!transport) {
+      throw Object.assign(new Error('SMTP is not configured'), { code: 'SMTP_NOT_CONFIGURED' });
+    }
+    const info = await transport.sendMail({
+      from: env.mailFrom, to: job.recipient, subject: job.subject, text: job.text,
+      messageId: `<${job.messageId}@campus-events.test>`
+    });
+    const accepted = info.accepted?.some((address) => address.toLowerCase() === job.recipient.toLowerCase());
+    if (!accepted) {
+      throw Object.assign(new Error('SMTP did not accept the recipient'), { code: 'SMTP_NOT_ACCEPTED' });
+    }
+    return { previewUrl: nodemailer.getTestMessageUrl(info) || undefined };
+  };
+}
+
+export const sendEmailJob = createEmailSender();

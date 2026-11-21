@@ -13,11 +13,11 @@ at Thomas More.
 - Create, retrieve, update, and delete events through the REST API.
 - Register attendees with input validation, duplicate-email checks, and capacity checks.
 - View registration counts, remaining seats, and occupancy statistics.
-- Attempt SMTP confirmation emails after registration, without blocking the response.
+- Save confirmation emails durably and retry SMTP failures in the background.
 - Cache GET responses in memory with a configurable TTL and invalidation after writes.
 - Store data in SQLite locally or PostgreSQL when `DATABASE_URL` is configured.
 
-Email retries, MCP tools, and real-time notifications are not implemented yet.
+MCP tools and real-time notifications are not implemented yet.
 See [current limitations](#current-limitations).
 
 ## Setup
@@ -80,8 +80,11 @@ of the startup directory. Keep credentials and connection URLs out of Git.
 | `PORT` | `3000` | API listening port. |
 | `DATABASE_URL` | Unset | PostgreSQL connection URL; takes precedence over `DB_STORAGE`. |
 | `DB_STORAGE` | `./data/events.sqlite` | SQLite file, relative to the API process's working directory. |
-| `SMTP_URL` | Unset | SMTP transport URL; without it, emails are generated as JSON but not delivered. |
+| `SMTP_URL` | Unset | SMTP transport URL; without it, jobs remain pending and the email worker is disabled. |
 | `MAIL_FROM` | `Campus Events <no-reply@campus-events.test>` | Sender address for confirmation emails. |
+| `MAIL_POLL_INTERVAL_SECONDS` | `5` | Delay between completed email-worker batches. |
+| `MAIL_RETRY_BASE_SECONDS` | `30` | Initial retry delay after an SMTP failure. |
+| `MAIL_RETRY_MAX_SECONDS` | `3600` | Maximum exponential retry delay. |
 | `CACHE_TTL_SECONDS` | `60` | Lifetime of cached GET responses. |
 | `LOG_LEVEL` | `info` | Application logging level. |
 
@@ -91,6 +94,28 @@ Changing the API port also requires updating the proxy target in
 `npm run seed` deletes and recreates the configured database tables with demo
 data. Check the selected database first: if a local env file points to production,
 local writes and seeding affect production too.
+
+### Confirmation email delivery
+
+Registration and a pending email job are committed in the same database
+transaction. The job stores the recipient and message content, so later event
+edits do not change the confirmation. SMTP is handled outside the HTTP request.
+
+The API starts an email worker when `SMTP_URL` is set. It processes up to ten jobs
+per batch, retries failures with exponential backoff, and marks a job sent only
+after SMTP accepts its recipient. Failed jobs are retained without an attempt
+limit. Error codes and job identifiers are logged instead of message contents.
+
+Database claims coordinate multiple API instances. Claims are renewed during
+delivery; abandoned claims become eligible again after their two-minute lease
+expires. Retries reuse the same message ID. Delivery is at least once: a crash
+after SMTP acceptance but before the database acknowledgement can cause a resend.
+SMTP acceptance does not guarantee arrival in the recipient's inbox.
+
+Without `SMTP_URL`, jobs stay pending without simulated delivery. Set a reachable
+SMTP URL and a provider-approved `MAIL_FROM`, then restart or redeploy the API.
+The worker runs inside the API process; when the host sleeps or stops it, pending
+jobs resume when the process runs again.
 
 ## Architecture
 
@@ -161,8 +186,9 @@ Run commands from the repository root:
 
 API tests run with `NODE_ENV=test`, which forces in-memory SQLite and ignores
 `DATABASE_URL`, `DB_STORAGE`, and local env files. Tests need no Neon database,
-Redis, RabbitMQ, or SMTP service. Test coverage includes API behavior, cache
-invalidation, registration failure handling, env loading, branch policy, and Vue components.
+Redis, RabbitMQ, or an external SMTP service. A local SMTP fixture tests rejection
+and recovery. Coverage includes API behavior, outbox transactions, retries, worker
+coordination, cache invalidation, env loading, branch policy, and Vue components.
 
 The GitLab CI configuration in [.gitlab-ci.yml](.gitlab-ci.yml) runs lint and tests.
 For manual persistence checks, see [Deployment](#deployment).
@@ -191,10 +217,15 @@ Render's local filesystem is ephemeral, so a local SQLite file is not persistent
 storage there. Changing from SQLite to PostgreSQL does not migrate existing
 records automatically; back up and transfer any required data before switching.
 
+Render's Free service blocks outbound SMTP ports 25, 465, and 587. Configure an
+SMTP endpoint on a port the host permits, or choose a deployment/delivery setup
+that supports your provider. Retries cannot overcome a permanently blocked port.
+See [Render's network limitations](https://render.com/docs/free#other-limitations).
+
 ## Current limitations
 
-- Failed SMTP attempts are logged but are not stored for retry. Durable email
-  delivery is the next reliability improvement.
+- Email delivery requires a reachable SMTP service. Retries survive restarts,
+  but run only while the API process is active and do not provide exactly-once delivery.
 - Registration checks are sequential application checks, not an atomic capacity
   reservation. Concurrent requests can bypass capacity or duplicate checks.
 - The in-memory cache belongs to one API process; invalidation is not shared

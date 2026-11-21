@@ -19,6 +19,12 @@ if (process.env.NODE_ENV !== 'test') {
 
 const nodeEnv = process.env.NODE_ENV || 'development';
 
+function milliseconds(value, fallbackSeconds) {
+  const parsed = Number(value) * 1000;
+  return Number.isFinite(parsed) && parsed >= 1 && parsed <= 2_147_483_647
+    ? parsed : fallbackSeconds * 1000;
+}
+
 export const env = {
   nodeEnv,
   port: Number(process.env.PORT) || 3000,
@@ -26,9 +32,12 @@ export const env = {
   // Integration tests reset tables, so they must never connect to saved data.
   databaseUrl: nodeEnv === 'test' ? '' : process.env.DATABASE_URL || '',
   dbStorage: nodeEnv === 'test' ? ':memory:' : process.env.DB_STORAGE || './data/events.sqlite',
-  // Mail server address, e.g. smtps://user:password@smtp.example.com. Empty = don't really send.
+  // Missing SMTP leaves confirmation jobs pending instead of simulating delivery.
   smtpUrl: process.env.SMTP_URL || '',
   mailFrom: process.env.MAIL_FROM || 'Campus Events <no-reply@campus-events.test>',
+  mailPollIntervalMs: milliseconds(process.env.MAIL_POLL_INTERVAL_SECONDS, 5),
+  mailRetryBaseMs: milliseconds(process.env.MAIL_RETRY_BASE_SECONDS, 30),
+  mailRetryMaxMs: milliseconds(process.env.MAIL_RETRY_MAX_SECONDS, 3600),
   // How long (in seconds) a GET answer stays in the cache.
   cacheTtlSeconds: Number(process.env.CACHE_TTL_SECONDS) || 60
 };

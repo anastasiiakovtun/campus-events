@@ -107,4 +107,24 @@ describe('Environment file loading', () => {
     assert.throws(() => inspectEnvironment(), (error) =>
       error.status === 1 && error.stderr.toString().includes('api/.env.local'));
   });
+
+  it('reads email polling and retry intervals in seconds', () => {
+    const env = inspectEnvironment(directory, {
+      MAIL_POLL_INTERVAL_SECONDS: '2', MAIL_RETRY_BASE_SECONDS: '10', MAIL_RETRY_MAX_SECONDS: '120'
+    });
+
+    assert.equal(env.mailPollIntervalMs, 2000);
+    assert.equal(env.mailRetryBaseMs, 10_000);
+    assert.equal(env.mailRetryMaxMs, 120_000);
+  });
+
+  it('uses default email intervals for invalid timer values', () => {
+    const env = inspectEnvironment(directory, {
+      MAIL_POLL_INTERVAL_SECONDS: 'Infinity', MAIL_RETRY_BASE_SECONDS: '-1', MAIL_RETRY_MAX_SECONDS: '0'
+    });
+
+    assert.equal(env.mailPollIntervalMs, 5000);
+    assert.equal(env.mailRetryBaseMs, 30_000);
+    assert.equal(env.mailRetryMaxMs, 3_600_000);
+  });
 });
